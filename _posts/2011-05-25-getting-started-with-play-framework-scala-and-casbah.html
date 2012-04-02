@@ -1,0 +1,159 @@
+--- 
+layout: post
+title: Getting started with Play Framework, Scala and Casbah
+published: true
+meta: 
+  dsq_thread_id: "313884086"
+  _edit_last: "1"
+tags: 
+- Casbah
+- MongoDB
+- Scala
+type: post
+status: publish
+---
+I've been dorking around with the <a href="http://scala.playframework.org" title="Play Framework (scala)" target="_blank">Play Framework</a>, <a href="http://www.scala-lang.org/" title="Scala" target="_blank">Scala</a> and <a href="http://api.mongodb.org/scala/casbah/" title="Casbah" target="_blank">Casbah</a> recently and I wanted to share my recent progress. I'm new to scala and play, so I am probably running afoul of some of the best practices out there. If you've got any advice for me after reading this post, please do share.
+
+Here's what we're going to do in this tutorial:
+
+<ol> 
+  <li><a href="#setup">Set up a new play framework project using scala</a></li> 
+  <li><a href="#deps">Add the dependencies so you can use Casbah</a></li>
+  <li><a href="#controller">Create a controller that lists / posts messages to MongoDB</a></li> 
+  <li><a href="#templates">Create templates for the app</a></li>
+  <li><a href="#routes">Create routes for our new controller</a></li>
+  <li><a href="#win">You win!</a></li>
+</ol>
+
+<h2 id="setup">Set up a new play framework project using scala</h2> 
+
+<pre class="brush: bash">
+bash$ play install scala 
+bash$ play new myCasbahDemo --with scala 
+</pre> 
+
+Now you should have a new directory called "myCasbahDemo" populated with the template for a play app. 
+
+<h2 id="deps">Add the dependencies so you can use Casbah</h2> 
+
+We need to modify the conf/dependencies.yml file to tell play how to load the casbah dependencies. Here's my conf/dependencies.yml file
+
+<pre class="brush: plain"> 
+# Application dependencies
+require:
+    - play
+    - play -&gt; scala 0.9
+    - com.mongodb.casbah -&gt; casbah_2.8.1 2.1.2
+
+repositories:
+  - scalatools:
+     type: iBiblio
+     root: http://scala-tools.org/repo-releases/
+     contains:
+       - com.mongodb.casbah -&gt; *
+       - org.scalaj -&gt; *
+</pre> 
+
+Now we can run 
+<pre class="brush: bash">
+bash$ play dependencies
+</pre> 
+
+Play will fetch the casbah dependencies and install them in the local project. 
+
+<h2 id="controller">Create a controller that lists / posts messages to MongoDB</h2>
+
+I created a new controller in app/controllers/Messages.scala with the following content: 
+
+<pre class="brush: scala">
+package controllers;
+
+import play.mvc._;
+import com.mongodb.casbah.Imports._
+import scala.collection.JavaConverters._
+
+object Messages extends Controller {
+
+  val _mongoConn = MongoConnection()
+
+  def index = {
+
+    val msgs = _mongoConn("casbah_test")("test_data").find( "msg" $exists true $ne "" )
+    val msgStrings = msgs.map( (obj: DBObject) =&gt; obj.getOrElse("msg","") )
+    Template( 'msgStrings -&gt; msgStrings.asJava )
+  }
+
+  def save(msg:String) = {
+    val doc = MongoDBObject("msg" -&gt; msg)
+    _mongoConn("casbah_test")("test_data").save( doc )
+    Redirect("/messages")
+  }
+}
+</pre> 
+
+Our controller has two methods: "index" and "save". 
+
+Index grabs a list of messages from mongo, extracts the text, and renders them in the corresponding template (we'll look at those in a moment). 
+
+There's a bit of magic going on here. Play uses Groovy as its template language, but many Scala types don't directly translate to groovy types. So you'll notice these lines of code: 
+
+<pre class="brush: scala; first-line: 14">
+    val msgStrings = msgs.map( (obj: DBObject) =&gt; obj.getOrElse("msg","") )
+    Template( 'msgStrings -&gt; msgStrings.asJava )
+</pre>
+
+First, we got back a cursor from our mongo query. So we use map to extract the "msg" attribute from each of the docs returned. This gives us a scala <code>List</code>. But the Groovy language currently used by Play templates do not know how to iterate over a Scala collection. In order to help programmers working with other JVM languages, Scala 2.8.1 + provide the <code>scala.collection.JavaConverters</code> library, which adds the <code>asJava</code> method to Scala Collections (And an equivalent <code>asScala</code> method to Java collections).  By calling <code>asJava</code>, we wrap our <code>List</code> in a Java compatible object that can be iterated. 
+
+We are working to provide an add on to Casbah or a patch to Play to make this easier in the future. In the mean time, be sure to include <code>scala.collection.JavaConverters</code> and convert your scala types to java types before calling your template. 
+
+Save accepts a new string message from the client and saves it to the collection before redirecting the user back to the message list template. 
+
+Note that I'm opening a connection to MongoDB in the controller. This isn't a great design choice as this connection can be re-used by other controllers. In a future post, i'm going to add a real model layer and abstract the connection to mongoDB out. But for the time being, this will suffice. 
+
+<h2 id="templates">Create templates for the app</h2> 
+
+There's just one template for my app, a simple page with a form field for submitting a new message, followed by a list of the existing messages. My template is in app/views/Messages/index.html, following the play pattern. 
+
+
+<pre class="brush: groovy"> 
+#{extends 'main.html' /}
+#{set title:'Home' /}
+
+&lt;form action="@{Messages.save()}" method="POST"/&gt;
+  &lt;input type="text" name="msg"/&gt;
+  &lt;input type="submit" value="Add message" /&gt;
+&lt;/form&gt;
+
+&lt;ul&gt;
+  #{list items:msgStrings, as:'mess' }
+  &lt;li&gt;${ mess }&lt;/li&gt;
+  #{/list}
+&lt;/ul&gt;
+</pre> 
+
+<h2 id="routes">Create a route for our new controller</h2> 
+in conf/routes, we need to add a route to our new controller. Here's what mine looks like: 
+
+<pre class="brush: plain"> 
+# Routes
+# This file defines all application routes (Higher priority routes first)
+# ~~~~
+
+# Home page
+GET     /                                       Messages.index
+POST    /                                       Messages.save
+</pre> 
+
+<h2 id="win">Try it out!</h2> 
+
+First off, make sure that mongod is running on your localhost (we used the default constructor of the MongoDB connection which means it will look for mongod on localhost on the default ports. 
+
+<pre class="brush: bash">
+bash$ play run 
+</pre> 
+
+Wait for the app to startup, then point your browser at localhost:9000
+
+And bam! You've got your first play + scala + casbah app up and running! 
+
+You can also check out the <a href="http://github.com/jsr/casbah_play_tutorial" title="Casbah Play Tutorial" target="_blank">full source code for my demo app</a>.

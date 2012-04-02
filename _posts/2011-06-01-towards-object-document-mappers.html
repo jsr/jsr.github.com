@@ -1,0 +1,131 @@
+--- 
+layout: post
+title: Towards object document mappers
+published: false
+meta: 
+  _edit_last: "1"
+tags: []
+
+type: post
+status: draft
+---
+I've spent a lot of time at 10gen working with the various mongodb drivers and object relational mapping layers that have been built. Most of the ORM layers created to date have been constructed in such a way as to make mongoDB look like a relational data store. This has been great for adoption, as it makes the technology look like something that developers are accustomed to using. But I've also felt that we're leaving a lot on the table by carrying forward the restrictions that relational data has placed on us.
+
+A lot of ORM systems place awkward constraints on our use of mongodb. Consider for example, a simple address book. In MongoMapper (my mongo ORM of choice), we might make something that looks like this: 
+
+<pre class="brush: ruby">
+class Contact
+  include MongoMapper::Document
+ 
+  key :first_name
+  key :last_name 
+  many :addresses
+end 
+
+class Address
+  include MongoMapper::EmbeddedDocument 
+  key :number
+  key :street
+  key :city
+  key :state
+end 
+</pre> 
+
+This works fine, but it bugs me that Address gets its own class. It's not really a first class citizen as Contact is, but rather an embedded document, and as such, it's rarely dealt with on its own. 
+
+I'd rather be able to capture the whole document in a single class. Something like this: 
+
+<pre class="brush: ruby">
+class Contact 
+   key :first_name
+   key :last_name 
+   array :addresses do 
+      document do 
+          key :number 
+          key :street
+          key :city 
+          key :state
+      end 
+   end 
+end 
+</pre> 
+
+Here I've declared everything in a single class. Address is no longer a first class citizen, but modeled as a nested element inside of Contact. This is a few lines of code less than the previous example, and lets me contain my model in a single file. 
+
+Logically, rather than specifying just the top level keys that occur in the document, we're actually defining a document schema in our class model. Now we can do some interesting things that are difficult to model in MongoMapper, ActiveRecord, or other ORM layers. 
+
+<h2>Validation</h2> 
+Now that my code contains a schema for the documents in my collection, I can do some neat validation. 
+
+First, it's easy to validate a document before saving it. I can do this all in one go without dealing with calling validations spread across a bunch of different models. 
+
+Next, I can validate docs on their way out of the database. So i can check on reads that the document matches the expectations of my code. 
+
+Finally, I can also validate the documents that exist in the database. You should even be able to turn that schema into a query that will pull out documents in your mongo that don't adhere to your schema. 
+
+<h2>Choice fields</h2> 
+One of the common patterns is a choice field. Here we say that the document either has one set of attributes, or some other, but not both. We could represent this in our schema as something like this: 
+
+<pre class="brush: ruby">
+class Contact 
+   choice do 
+      lambda { 
+         key :first_name
+         key :last_name
+      }, 
+      lambda { 
+         key :full_name
+      }
+   end  
+   array :addresses do 
+      document do 
+          key :number 
+          key :street
+          key :city 
+          key :state
+      end 
+   end 
+end 
+</pre> 
+
+We can't pass multiple blocks, so I've used lambda's to pass in the different options for the choice (fwiw, i don't like this syntax and am searching for something better). This says that the document will either have the first_name, last_name fields, or the full_name field. 
+
+<h2>Min Occurs, Max Occurs</h2> 
+When you have an array in a document, you often want to be able to express the number of elements in that array. In schema we can use the min_occurs and max_occurs attributes. 
+
+For example, let's say that we want a user to have at least 1 address, but no more than 5. 
+
+<pre class="brush: ruby">
+class Contact 
+   key :first_name
+   key :last_name 
+   array :addresses, :min_occurs => 1, :max_occurs => 5 do 
+      document do 
+          key :number 
+          key :street
+          key :city 
+          key :state
+      end 
+   end 
+end 
+</pre>
+
+<h2>Uniqueness within set associations</h2> 
+Specifying uniqueness within members of an association can be a pain. Normally what you need to do is specify a uniqueness validation within the nested class and scope it to some join field. But on an embedded document, there's often not a join field to use. We can express this at the schema level. 
+
+As a contrived example, let's say that a user can only have one address per state. 
+
+<pre class="brush: ruby">
+class Contact 
+   key :first_name
+   key :last_name 
+   array :addresses, :unique_on => :state do 
+      document do 
+          key :number 
+          key :street
+          key :city 
+          key :state
+      end 
+   end 
+end 
+</pre>

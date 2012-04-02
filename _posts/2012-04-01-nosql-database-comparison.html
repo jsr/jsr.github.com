@@ -1,0 +1,178 @@
+--- 
+layout: post
+title: NoSQL Database Comparison
+published: true
+meta: 
+  dsq_thread_id: "632877165"
+  _edit_last: "1"
+tags: 
+- Cassandra
+- HBase
+- MongoDB
+- NoSQL
+- Riak
+type: post
+status: publish
+---
+People often ask to compare the various NoSQL solutions. There are a number of comparisons out there, in particular there's <a href="http://kkovacs.eu/cassandra-vs-mongodb-vs-couchdb-vs-redis" title="Cassandra vs. MongoDB vs. CouchDB ..." target="_blank">Kristóf Kovács summary is pretty comprehensive</a>. But I think that many comparisons focus on details that are secondary to the concerns of most developers. 
+
+There's a lot of focus out there on mechanisms and implementation details, and not a lot of focus on the abstract guarantees that these databases can provide. I tend to break down the various NoSQL datastores according to the data models exposed to the developer and the invariants that the system can guarantee against those data models.
+
+You can break these down into 4 characteristics of your data store: Data Model, Consistency, Availability, and Partitioning. In this post we'll look at the various design choices within each category and the implications of each choice. 
+
+We'll start with an overall picture of some of the more popular NoSQL stores and where they fit along these axes. We'll then dig into each axes and look at the choices and what it means for our application. 
+
+<h2>NoSQL Datastore Overview</h2>
+
+<table>
+<tbody>
+<tr>
+<th></th>
+<th>MongoDB</th>
+<th>Cassandra</th>
+<th>Riak</th>
+<th>HBase</th>
+</tr>
+<tr>
+<td><strong>Data Model</strong></td>
+<td>Documents</td>
+<td>Wide Columns</td>
+<td>Key Value</td>
+<td>Wide Columns</td>
+</tr>
+<tr>
+<td><strong>Consistency</strong></td>
+<td>Strong</td>
+<td>Eventual</td>
+<td>Eventual</td>
+<td>Strong</td>
+</tr>
+<tr>
+<td><strong>Availability</strong></td>
+<td>Master Election</td>
+<td>Write Quorum</td>
+<td>Write Quorum</td>
+<td>Master Election</td>
+</tr>
+<tr>
+<td><strong>Partioning</strong></td>
+<td>Range or Hash</td>
+<td>Hash</td>
+<td>Hash</td>
+<td>Range</td>
+</tr>
+</tbody>
+</table>
+
+
+<h2>Data Model</h2>
+The data model specifies how your application will format and store data in the database and how you can query and update that data later. Most of the NoSQL data stores fall into one of a few different data model options: 
+
+<h3>Key Value</h3>
+Data is modelled as opaque blobs identified by a unique identifier. Key Value stores are the simplest data models available since there's relatively little work for the database to do. Your query language is limited to lookups by primary key, tho some vendors have extended their key value store with simple secondary indexes (eg. riak).
+
+<b>Key Features</b>
+<ul>
+<li>High performance</li>
+</ul>
+
+<h3>Wide Column</h3>
+Data is modelled as a multi-level map comprising a Row Key, Column Family, and Column name. This model was popularized by <a href="http://static.googleusercontent.com/external_content/untrusted_dlcp/research.google.com/en/us/archive/bigtable-osdi06.pdf" title="Google BigTable" target="_blank">Google's BigTable</a>. 
+
+Queries must include the row key and can optionally include names of column families and columns to further restrict the query. 
+
+This is a big improvement over the key-value API in terms of query flexibility as we can now filter on column names. However, we still lack the general ability to query on values as we can in traditional SQL queries. This model works pretty good for things like time series data where you need to store lots of values associate with a stream. But it can be challenging to model business data. 
+
+<b>Key Features</b>
+<ul>
+<li>More flexible than key-value</li>
+<li>Good at storing time series data</li>
+</ul>
+
+<h3>Document</h3> 
+Data is modelled as hierarchical documents that consist of name value pairs nested within each other. This could be JSON, XML or any other similar syntax, tho most document oriented stores that are popular today work off of JSON. Documents benefit from being closer a closer abstraction to the objects we use in code. You tend to be able to take object trees and serializes them as JSON directly into the database, rather than requiring a mapping layer as is typical with relational or wide-column stores. 
+
+<b>Key Features</b>
+<ul>
+<li>Maps closer to programming language/li>
+<li>Easier to query, index</li>
+</ul>
+
+<h2>Consistency</h2>
+<a href="http://en.wikipedia.org/wiki/Consistency_(database_systems)" title="Wikipedia: Consistency (Database Systems)" target="_blank">Consistency</a> in the context of distributed databases refers to whether two clients trying to perform operations on objects in the database see the same or conflicting views of the world. The more they see the same view, the more "consistent" we say they are. Eric Brewer's work on the <a href="http://en.wikipedia.org/wiki/CAP_theorem" title="CAP Theorem" target="_blank">CAP theorem</a> has guided much of the discussion around consistency today, pointing out that when a distributed database experiences failures, it must choose whether it wants to maintain Availability (e.g. clients can still perform operations on objects) or Consistency (e.g. clients see the same version of objects). We find that if we relax our consistency model, we can get stronger availability and vise versa. 
+
+<h3>Eventual Consistency</h3> 
+Eventual consistency is a relaxed consistency model typically employed in order to achieve higher availability in the database. In an eventually consistent system, writes to the database are <em>eventually</em> visible to to all readers. This means that if I send a write request to the database and immediately try to read, then I may not read my own write.
+
+<b>Key Features</b>
+<ul>
+<li>High availability (as in, no downtime)</li>
+<li>Might have inconsistent data</li>
+</ul>
+
+
+<h3>Strong Consistency</h3> 
+Strong consistency ensures that if I perform a write operation to the database, other clients are guaranteed to see my write on the very next read. Databases that provide this level of guarantee often require small periods of un-availability during failures when they are temporarily unable to enforce this level of consistency. 
+
+<b>Key Features</b>
+<ul>
+<li>Periods of unavailability while fail-overs happen</li>
+<li>Clients can get stonger guarantees on object consistency</li>
+</ul>
+
+
+<h2>Availability</h2> 
+
+Intimately tied to the Consistency model of your database is the Availability model. Most NoSQl stores use one of two approaches to achieve availability: 
+
+<h3>Master Slave</h3>
+In this type of data store, there is a single master that <em>owns</em> each object in the database and multiple slaves that have eventually consistent copies of objects. This master is the only node that can process write requests or strongly consistent read requests for an object. If this master node fails or is otherwise unavailable, the system must go through a leader election process to find a new master. During this election process, the objects hosted at the master are unavailable for writes or consistent reads. Most systems still allow eventually consistent reads from slaves even during failures. 
+
+<b>Key Features</b>
+<ul>
+<li>Enables strong consistency</li>
+<li>Some unavailability during fail-overs</li>
+</ul>
+
+
+<h3>Multi-Master Quorem</h3>
+There are multiple masters for a single object and all of them are writable simultaneously. A client must write to a <em>quorem</em> of available masters in order to write the object. This allows multiple nodes to be failed without losing the ability to write. However, this model also results in eventually consistent reads for most real world configurations. 
+
+<b>Key Features</b>
+<ul>
+<li>Enables high availability</li>
+<li>Some inconsistency expected</li>
+</ul>
+
+
+<h2>Partitioning</h2>
+Partitioning refers to how data is distributed across the cluster. 
+
+<h3>Range Based Partitioning</h3>
+In Range Based Partitioning, contiguous ranges of values are stored together on nodes. This means that the system can easily support range query operations. 
+
+<b>Key Features</b>
+<ul>
+<li>Efficient range queries</li>
+<li>Hash partitioning is easy to add</li>
+</ul>
+
+
+<h3>Hash based partitioning</h3> 
+In Hash Based Partitioning, objects are distributed across the cluster according to a consistent hashing function. This enables efficient distribution of work for writes and reads by primary key, but it also means that a range query must hit every node on the cluster. 
+
+<b>Key Features</b>
+<ul>
+<li>Good load distribution</li>
+<li>Range queries are impossible or ineffiecient</li>
+</ul>
+
+<h2>Summary</h2>
+Choosing the right NoSQL store requires you understanding your use case and the tradeoffs of the platform you select. Most people move to NoSQL because some aspect of their relational datastore is inadequate. It's a useful exercise to think about what it is that you don't like about your existing database and what it is you want to get from NoSQL. I find that it's useful to think about this by asking the following questions: 
+
+<ol>
+<li>What does my data look like and what kind of queries do I want to run? Are range queries important?</li> 
+<li>When I have failures, would I rather have consistency violations, or unavailbility?</li>
+</ol> 
+
+Compare the answers to these questions to the categories above and see where you fit.

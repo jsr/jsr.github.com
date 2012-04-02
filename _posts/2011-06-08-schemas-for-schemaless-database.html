@@ -1,0 +1,52 @@
+--- 
+layout: post
+title: Schemas for schemaless databases
+published: true
+meta: 
+  dsq_thread_id: "325665886"
+  _edit_last: "1"
+tags: 
+- MongoDB
+type: post
+status: publish
+---
+Most of the modern NoSQL databases have eschewed the traditional RDBMS schema for a schemaless design. Databases like MongoDB, CouchDB, HBase, and Riak all allow you to store arbitrary new fields in your database without having to change any configuration. 
+
+With this comes some great advantages. Development cycles and data management just go more quickly because there's less code to change (I can just update my Java or Python code without reconfiguring my Database). 
+
+But there are still some challenges that a schema would make easier:  
+
+<ul> 
+ <li><a href="#validation">Validation is hard without a schema. We're left to language specific validation rules that don't port to other environments</a></li> 
+ <li><a href="#generation">Multi-language development is difficult because we need to synchronize our data model across languages without any neutral format</a></li> 
+ <li><a href="#neutral">There's no standard language neutral way to document data models</a></li> 
+ <li><a href="#types">Many derivative software such as batch processing or aggregation engines would be easier with some formal type definitions</a></li> 
+</li>
+</ul>
+<h2 id="validation">Validation</h2> 
+Today most NoSQL stores leave validation as an exercise for the reader. This means that in your application code, you need to write lots of defensive code & logic to make sure data is valid before you put it into the store. 
+
+Once it's there, it's very difficult to figure out if the data in your database is actually valid. Human errors, faulty software, or any number of defects or software upgrades could result in invalid data. 
+
+Validation is difficult, especially with document-oriented data stores. Traditional SQL schemas don't really fit the bill for a few reasons:
+<ul>
+<li>Data is not stored in references, so a referential schema is more or less useless</li>
+<li>SQL schemas are typically not "round-trip" compatible. In other words, I cannot generate a schema from my code, and then generate code from my schema</li>
+<li>It's difficult to retain the highly dynamic nature of document oriented stores in conjunction with a strict schema</li>
+</ul> 
+
+A great validation engine for document oriented database would survive these challenges. 
+
+<h2 id="generation">Multi-language development</h2>
+If you're writing clients to your data in multiple languages, you need to essentially recreate your schema in each language accessing your database. Modern tools like <a href="http://avro.apache.org/">Avro</a>, <a href="http://code.google.com/p/protobuf/">Protobuffs</a>, and <a href="http://thrift.apache.org/">Thrift</a>, and even older tools like <a href="http://en.wikipedia.org/wiki/Interface_definition_language">CORBA IDL</a>, <a href="http://en.wikipedia.org/wiki/Abstract_Syntax_Notation_One">ASN.1</a>, and <a href="http://en.wikipedia.org/wiki/DCE/RPC">DCE/RPC</a> provide smart workflows for dealing with multi-language environments because you can build a generic description of your data and generate language specific stubs for any environment you want to access it. 
+
+It would be great to have this ability for document oriented stores
+
+<h2 id="neutral">Language neutral</h2>
+Ideally a schema definition language would be external to the language being used to access the database. The schema should be the same regardless of which language I'm using to access the DB and let us work in whatever language is necessary for the job at hand
+
+<h2 id="types">Type systems for add on tools</h2>
+When building things like Map Reduce jobs or processing pipelines, it's useful to be able to reason about the types of objects passing between phases in my pipeline. Jobs are significantly simpler if I can have some guarantees that, for example, each document contains specific fields so the system can validate objects before entering the pipeline. 
+
+<h2>Thoughts and next steps</h2> 
+I've been talking to <a href="http://twitter.com/rit">Brendan McAdams</a> about a system that would bridge some of these gaps, specifically for mongoDB. Look for some follow up posts where we expand on our thoughts here
