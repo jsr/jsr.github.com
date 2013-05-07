@@ -29,100 +29,43 @@ We'll start with an overall picture of some of the more popular NoSQL stores and
 ## NoSQL Datastore Overview
 
 
-
-
-
-
-
-
-
-
-
-MongoDB
-Cassandra
-Riak
-HBase
-
-
-
-
-
-**Data Model**
-
-
-Documents
-
-
-Wide Columns
-
-
-Key Value
-
-
-Wide Columns
-
-
-
-
-
-
-**Consistency**
-
-
-Strong
-
-
-Eventual / Quorum
-
-
-Eventual / Quorum
-
-
-Strong
-
-
-
-
-
-
-**Availability**
-
-
-Single Master
-
-
-Multi-Master
-
-
-Multi-Master
-
-
-Single Master
-
-
-
-
-
-
-**Partioning**
-
-
-Range or Hash
-
-
-Hash
-
-
-Hash
-
-
-Range
-
-
-
-
-
-
+<table>
+    <tr>
+        <th></th>
+        <th>MongoDB</th>
+        <th>Cassandra</th>
+        <th>Riak</th>
+        <th>HBase</th>
+    </tr>
+    <tr>
+        <td>Data Model</td>
+        <td>Documents</td>
+        <td>Wide Column</td>
+        <td>Key Value</td>
+        <td>Wide Column</td>
+    </tr>
+    <tr>
+        <td>Consistency</td>
+        <td>Strong</td>
+        <td>Eventual / Quorum</td>
+        <td>Eventual / Quorum</td>
+        <td>String</td>
+    </tr>
+    <tr>
+        <td>Availability</td>
+        <td>Single Master</td>
+        <td>Multi Master</td>
+        <td>Multi Master</td>
+        <td>Single Master</td>
+    </tr>
+    <tr>
+        <td>Partitioning</td>
+        <td>Range or Hash</td>
+        <td>Hash</td>
+        <td>Hash</td>
+        <td>Range</td>
+    </tr>
+</table>
 
 
 ## Data Model

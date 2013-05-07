@@ -47,10 +47,10 @@ Here's what we're going to do in this tutorial:
 
 
     
-    
-    bash$ play install scala 
-    bash$ play new myCasbahDemo --with scala 
-    
+{% highlight bash linenos %}
+bash$ play install scala 
+bash$ play new myCasbahDemo --with scala 
+{% endhighlight %}
 
 
 
